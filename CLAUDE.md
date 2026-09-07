@@ -19,6 +19,21 @@ Qt Creator build configs already exist under `build/Qt_Sys-{Release,RelWithDebIn
 
 Useful CMake options: `-DBUILD_WERROR=ON`, `-DENABLE_DEBUG_OUTPUT=ON`.
 
+### macOS (`build-macos.sh`)
+
+Upstream has no install rule on macOS and official macOS releases are sponsor-only, so this fork carries `build-macos.sh` at the repo root — a developer wrapper for Apple Silicon + Homebrew. Run it instead of the raw `cmake` invocation above:
+
+```bash
+./build-macos.sh                # incremental build + deploy to ~/Applications/Strawberry.app
+./build-macos.sh --install-deps # also `brew install` any missing dependencies
+./build-macos.sh --force        # re-bundle/sign/deploy even if the binary is unchanged
+./build-macos.sh --help         # all flags
+```
+
+What it does: checks the Homebrew formulae; builds KDSingleApplication (KDAB) statically into `~/.local` on first run (hard dependency, not in Homebrew); configures + builds with `-DUSE_BUNDLE=OFF -DENABLE_GPOD=OFF -DENABLE_SPARKLE=OFF -DENABLE_QTSPARKLE=OFF` (those features' deps are unavailable on Homebrew); then — **only when the compiled binary's sha256 changed** (tracked via `Contents/Resources/.build-hash`), `--force`, or the target is missing — completes the `.app` (icon + `PkgInfo`), ad-hoc signs it as `org.strawberrymusicplayer.strawberry`, deploys to `~/Applications/`, and refreshes Launch Services.
+
+The deployed bundle links against `/opt/homebrew` dylibs: it runs on this machine but is **not** self-contained. A distributable bundle/DMG needs [`jonaski/macdeploytool`](https://github.com/jonaski/macdeploytool) plus the `deploy` / `dmg` CMake targets. Strawberry is single-instance (KDSingleApplication) and all builds share `~/Library/Application Support/Strawberry/`, so quit a running copy before launching another.
+
 ### Tests
 
 Tests are built only when GTest, GMock, and Qt6 Test are found (`tests/` is added conditionally). They are `EXCLUDE_FROM_ALL`, so build them explicitly:
