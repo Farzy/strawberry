@@ -51,11 +51,11 @@ BUNDLE_ID="org.strawberrymusicplayer.strawberry"
 ICNS_SRC="${REPO_ROOT}/dist/macos/strawberry.icns"
 KDSA_REPO="https://github.com/KDAB/KDSingleApplication"
 
-# Homebrew formulae the build needs. Keg-only ones (icu4c, openssl, sqlite) are
+# Homebrew formulae the build needs. Keg-only ones (icu4c, openssl) are
 # resolved explicitly further down.
 BREW_DEPS=(
   qt gstreamer taglib boost chromaprint fftw libebur128
-  libmtp libcdio google-sparsehash gnutls
+  libmtp libcdio google-sparsehash gnutls uchardet
   cmake ninja pkgconf
 )
 
@@ -136,7 +136,6 @@ fi
 
 QT_PREFIX="$(brew --prefix qt)"
 OPENSSL_PREFIX="$(brew --prefix openssl@3)"
-SQLITE_PREFIX="$(brew --prefix sqlite)"
 
 # icu4c is versioned in Homebrew and the suffix changes over time.
 ICU_PREFIX="$(
@@ -147,7 +146,7 @@ ICU_PREFIX="$(
 )"
 [ -n "$ICU_PREFIX" ] || die "Could not locate an icu4c Homebrew keg."
 
-export PKG_CONFIG_PATH="${ICU_PREFIX}/lib/pkgconfig:${OPENSSL_PREFIX}/lib/pkgconfig:${SQLITE_PREFIX}/lib/pkgconfig:${BREW_PREFIX}/lib/pkgconfig:${BREW_PREFIX}/share/pkgconfig"
+export PKG_CONFIG_PATH="${ICU_PREFIX}/lib/pkgconfig:${OPENSSL_PREFIX}/lib/pkgconfig:${BREW_PREFIX}/lib/pkgconfig:${BREW_PREFIX}/share/pkgconfig"
 
 # --------------------------------------------------------------------------- #
 # 2. KDSingleApplication (one-time, static, into ~/.local)
@@ -179,6 +178,11 @@ fi
 
 [ "$RECONFIGURE" -eq 1 ] && rm -f "${BUILD_DIR}/CMakeCache.txt"
 
+# Upstream probes that Qt's sqlite driver and Strawberry share one sqlite library
+# by registering an sqlite3_auto_extension.
+# Apple's system sqlite rejects that call (SQLITE_MISUSE), so the probe always fails on macOS,
+# although Homebrew's Qt does use the same system libsqlite3 as Strawberry.
+# Pre-seed the result to skip the probe.
 log "Configuring (${BUILD_TYPE})"
 cmake -S "${REPO_ROOT}" -B "${BUILD_DIR}" -G Ninja \
   -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
@@ -186,6 +190,7 @@ cmake -S "${REPO_ROOT}" -B "${BUILD_DIR}" -G Ninja \
   -DENABLE_GPOD=OFF \
   -DENABLE_SPARKLE=OFF \
   -DENABLE_QTSPARKLE=OFF \
+  -DQT_SQLITE_SAME_LIBRARY_TEST=1 \
   -DCMAKE_PREFIX_PATH="${QT_PREFIX};${LOCAL_PREFIX};${OPENSSL_PREFIX};${BREW_PREFIX}" \
   -DICU_ROOT="${ICU_PREFIX}"
 
